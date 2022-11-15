@@ -20,8 +20,12 @@ from awsglue.job import Job
 
 # Parameters mapping : retrieve the parameters passed to the Glue job and store them in the array "args"
 
-args = getResolvedOptions(sys.argv, ['JOB_NAME', 'glue_db_name', 'glue_orig_table_name', 's3_temp_folder',
-                                     's3_target_path', 'root_table', 'redshift_connection', 'redshift_db_name', 'redshift_schema', 'num_level_to_denormalize', 'num_output_files', 'keep_table_prefix', 'target_repo'])
+#args = getResolvedOptions(sys.argv, ['JOB_NAME', 'glue_db_name', 'glue_orig_table_name', 's3_temp_folder',
+#                                     's3_target_path', 'root_table', 'redshift_connection', 'redshift_db_name', 'redshift_schema', 'num_level_to_denormalize', 'num_output_files', 'keep_table_prefix', 'target_repo'])
+params = []
+if '--JOB_NAME' in sys.argv:
+    params.append('JOB_NAME')
+args = getResolvedOptions(sys.argv, params)
 
 # Spark and Glue context initialization:
 
@@ -56,18 +60,31 @@ logger = glueContext.get_logger()
 #                                                           set to 'redshift' to write only to Amazon Redshift only
 #                                                           set to 'none' to simulate the job and print out the schema of the final tables only
 
-glue_db_name = args['glue_db_name']
-glue_orig_table_name = args['glue_orig_table_name']
-s3_temp_folder = args['s3_temp_folder']
-s3_target_path = args['s3_target_path']
-redshift_connection = args['redshift_connection']
-redshift_db_name = args['redshift_db_name']
-redshift_schema = args['redshift_schema']
-root_table = args['root_table']
-num_level_to_denormalize = int(args['num_level_to_denormalize'])
-num_output_files = int(args['num_output_files'])
-keep_table_prefix = args['keep_table_prefix']
-target_repository = args['target_repo']
+glue_db_name = 'datalake'                                
+glue_orig_table_name = 'dx4_sensor_poc_delivery_stream_kinesis_4_2022_10_24_08_40_06_501e4d09_79ab_4091_9da1_d885a431f3c43_json'                      
+redshift_connection = 'gluersdb'                          
+s3_temp_folder = 's3://...'        
+s3_target_path = 's3://...'  
+redshift_db_name = 'gluersdb'                            
+redshift_schema = 'ny_phil'                              
+root_table = 'deuce'                          
+num_level_to_denormalize = 0                            
+num_output_files = 4             
+keep_table_prefix = 0                                  
+target_repository = 's3'      
+
+# glue_db_name = args['glue_db_name']
+# glue_orig_table_name = args['glue_orig_table_name']
+# s3_temp_folder = args['s3_temp_folder']
+# s3_target_path = args['s3_target_path']
+# redshift_connection = args['redshift_connection']
+# redshift_db_name = args['redshift_db_name']
+# redshift_schema = args['redshift_schema']
+# root_table = args['root_table']
+# num_level_to_denormalize = int(args['num_level_to_denormalize'])
+# num_output_files = int(args['num_output_files'])
+# keep_table_prefix = args['keep_table_prefix']
+# target_repository = args['target_repo']
 
 # additional variable inizialization:
 
@@ -183,8 +200,8 @@ def write_to_targets(tbl_name, dyn_frame, target_path, num_output_files, target_
     if target_repository == 's3' or target_repository == 'all':
         datasink_map[tbl_name] = glueContext.write_dynamic_frame.from_options(frame=dyn_frame, connection_type="s3",
                                                                               connection_options={
-                                                                                  "path": target_path},
-                                                                              format="glueparquet",
+                                                                                  "path": target_path,"recurse": True},
+                                                                              format="parquet",
                                                                               transformation_ctx="datasink_map['tbl_name']")
 
     if target_repository == 'redshift' or target_repository == 'all':
@@ -403,6 +420,17 @@ def denormalize_table(tables_to_join_map, start_join_level, number_nested_levels
 
     return denormlized_dataframe_map
 
+def read_json(glue_context, path):
+    dynamicframe = glue_context.create_dynamic_frame.from_options(
+        connection_type='s3',
+        connection_options={
+            'paths': [path],
+            'compression':'gzip',
+            'recurse': True
+        },
+        format='json', transformation_ctx = "dynamicframe"
+    )
+    return dynamicframe
 
 # native AWS Glue transforms
 
@@ -415,8 +443,10 @@ log_message = "read the source table from the glue catalog into a dynamicframe a
 logger.info(log_message)
 print(log_message)
 
-datasource0 = glueContext.create_dynamic_frame.from_catalog(
-    database=glue_db_name, table_name=glue_orig_table_name, transformation_ctx="datasource0")
+datasource0 = read_json(glueContext, "s3://...")
+
+#datasource0 = glueContext.create_dynamic_frame.from_catalog(
+ #   database=glue_db_name, table_name=glue_orig_table_name, transformation_ctx="datasource0")
 
 # ResolveChoice.apply is usesd to eliminate ambiguity in case some attributes have different data types in different files or section of a file
 
@@ -506,7 +536,7 @@ if is_to_denormalize(num_level_to_denormalize):
     print(log_message)
 
     # select the nested level wheere to start the denormalization based on input parameter number_nested_levels
-    if num_level_to_denormalize < number_nested_levels:
+    if num_level_to_denormalize < num/ber_nested_levels:
         start_join_level = (number_nested_levels - num_level_to_denormalize)
 
     # start denormalization
